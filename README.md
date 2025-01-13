@@ -31,4 +31,4 @@ Feel free to submit issues and enhancement requests!
 
 ## License
 
-[MIT License](LICENSE)
+[GNU GPLv3](LICENSE)
