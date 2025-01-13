@@ -1,0 +1,19 @@
+body {
+    width: 200px;
+    padding: 10px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+h1 {
+    font-size: 16px;
+    margin-top: 0;
+}
