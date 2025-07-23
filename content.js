@@ -5,9 +5,12 @@ chrome.storage.sync.get(
     if (data.hideCompanyAds || data.hideOpvalAds || data.hideDagtopperAds) {
       // Function to process listings
       const processListings = () => {
-        const listings = document.querySelectorAll(
+        var listings = document.querySelectorAll(
           "li.hz-Listing--gallery-item"
         );
+
+        listings = [...listings, ...document.querySelectorAll("li.hz-Listing--list-item")];
+
         var companyCount = 0;
         var opvalCount = 0;
         var dagtopperCount = 0;
