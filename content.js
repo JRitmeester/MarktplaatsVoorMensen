@@ -43,7 +43,8 @@ chrome.storage.sync.get(
             const dagtopperDiv = listing.querySelector(".hz-Listing-priority");
             if (
               dagtopperDiv &&
-              dagtopperDiv.textContent.includes("Dagtopper")
+              (dagtopperDiv.textContent.includes("Dagtopper") ||
+                dagtopperDiv.textContent.includes("Topadvertentie"))
             ) {
               shouldRemove = true;
               dagtopperCount++;
