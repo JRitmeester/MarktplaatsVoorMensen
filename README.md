@@ -7,6 +7,9 @@ A Chrome extension that enhances your Marktplaats browsing experience by filteri
 - Option to hide advertisements that contain links (indicating a business)
 - Option to hide listings with a sticker above the ad
 - Option to hide listings containing green text like "Dagtopper", "Topadvertentie", et cetera.
+- Option to hide listings with location "Heel Nederland" (usually a business)
+- Hides the "Advertenties door Marktplaats Pro" block entirely
+- Option to automatically load the next page(s) when a page ends up nearly empty after filtering
 - Settings persist across browser sessions
 - Clean and simple user interface
 
@@ -24,6 +27,7 @@ The extension is built using vanilla JavaScript and consists of:
 - `popup.html/js`: User interface for settings
 - `options.html/js`: Additional settings page
 - `styles.css`: Styling for popup and options pages
+- `test-element*.html`: Sample Marktplaats markup used to check the filters
 
 ## Contributing
 

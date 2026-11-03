@@ -1,37 +1,30 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // Get checkboxes
-    const companyAdsCheckbox = document.getElementById('hideCompanyAds');
-    const opvalAdsCheckbox = document.getElementById('hideOpvalAds');
-    const dagtopperAdsCheckbox = document.getElementById('hideDagtopperAds');
+const SETTING_IDS = [
+  "hideCompanyAds",
+  "hideOpvalAds",
+  "hideDagtopperAds",
+  "hideHeelNederlandAds",
+  "loadMorePages",
+];
 
-    // Load saved settings
-    chrome.storage.sync.get(['hideCompanyAds', 'hideOpvalAds', 'hideDagtopperAds'], function(data) {
-        companyAdsCheckbox.checked = data.hideCompanyAds || false;
-        opvalAdsCheckbox.checked = data.hideOpvalAds || false;
-        dagtopperAdsCheckbox.checked = data.hideDagtopperAds || false;
+const refreshActiveTab = () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { action: "refreshListings" });
+    }
+  });
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  chrome.storage.sync.get(SETTING_IDS, (settings) => {
+    SETTING_IDS.forEach((id) => {
+      document.getElementById(id).checked = Boolean(settings[id]);
     });
+  });
 
-    // Function to update settings and trigger content script
-    const updateSettings = function(setting, value) {
-        // Save to storage
-        chrome.storage.sync.set({ [setting]: value });
-        
-        // Send message to content script to refresh
-        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-            chrome.tabs.sendMessage(tabs[0].id, { action: "refreshListings" });
-        });
-    };
-
-    // Save settings when checkboxes are clicked
-    companyAdsCheckbox.addEventListener('change', function() {
-        updateSettings('hideCompanyAds', this.checked);
+  SETTING_IDS.forEach((id) => {
+    document.getElementById(id).addEventListener("change", (event) => {
+      chrome.storage.sync.set({ [id]: event.target.checked });
+      refreshActiveTab();
     });
-
-    opvalAdsCheckbox.addEventListener('change', function() {
-        updateSettings('hideOpvalAds', this.checked);
-    });
-
-    dagtopperAdsCheckbox.addEventListener('change', function() {
-        updateSettings('hideDagtopperAds', this.checked);
-    });
-}); 
+  });
+});
