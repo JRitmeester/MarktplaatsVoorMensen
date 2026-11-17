@@ -10,7 +10,7 @@ A Chrome extension that enhances your Marktplaats browsing experience by filteri
 - Option to hide listings with location "Heel Nederland" (usually a business)
 - Option to hide listings priced "Zie omschrijving" instead of an amount (often a business)
 - Hides the "Advertenties door Marktplaats Pro" block entirely
-- Option to automatically load the next page(s) when a page ends up nearly empty after filtering
+- Option to automatically load the next page(s) when a page ends up nearly empty after filtering. Marktplaats' own search filters (search text, price, distance) are kept on those pages, and their listings stay clickable
 - Text filter: show only listings that contain a given text (for example "Switch 2") in the title, the description, or either of them
 - Removes the empty banner slots that would otherwise leave white gaps between the remaining listings
 - Settings persist across browser sessions
@@ -36,6 +36,8 @@ The extension is built using vanilla JavaScript and consists of:
 - `content.js`: Main filtering logic
 - `text-filter.js`: Matching of the required text against title and description
 - `notice.js`: The "text filter active" notice above the results
+- `page-loader.js`: Loads a later results page, through a hidden frame when search filters are active
+- `listing-links.js`: Puts the address back on loaded listings that Marktplaats draws without one
 - `popup.html`, `options.html`: User interface for settings
 - `settings-form.js`: Loads and saves the settings for both pages
 - `background.js`: Fills in defaults for settings that are not stored yet

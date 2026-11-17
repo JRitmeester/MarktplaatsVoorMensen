@@ -38,7 +38,8 @@ const SEE_DESCRIPTION_PRICE = "zie omschrijving";
 const BANNER_SELECTOR = '[class*="hz-Banner"], li[class*="bannerContainer"]';
 
 // Marktplaats paginates before we filter, so a page can end up nearly empty.
-// When that happens we fetch the next page(s) and append their listings.
+// When that happens the next page(s) are loaded (see page-loader.js) and
+// their listings are appended.
 const NEXT_PAGE_LINK_SELECTOR = 'a[aria-label="Volgende"]';
 const LISTINGS_LIST_SELECTOR = 'ul[class*="hz-Listings"]';
 const MIN_VISIBLE_LISTINGS = 10;
@@ -121,47 +122,76 @@ const findMainList = (root) =>
       list.querySelector(LISTING_SELECTOR) !== null
   );
 
-const pageNumberFromUrl = (url) => {
-  const match = url.match(/\/p\/(\d+)\//);
+const PAGE_PATH_PATTERN = /\/p\/(\d+)\//;
+const PAGE_COUNT_PATTERN = /Pagina\s+(\d+)\s+van\s+(\d+)/;
+// Marks the divider and the listings this extension added from later pages.
+const LOADED_ATTRIBUTE = "data-mvm-loaded";
+// With search filters Marktplaats first shows the unfiltered page and then
+// redraws the list. Later pages are only added once that has had time to
+// happen, so they end up below the redrawn list instead of inside it.
+const FILTER_SETTLE_MS = 2500;
+
+const pageNumberFromPath = (pathname) => {
+  const match = pathname.match(PAGE_PATH_PATTERN);
   return match ? Number(match[1]) : 1;
 };
+
+const pathForPage = (pathname, pageNumber) =>
+  PAGE_PATH_PATTERN.test(pathname)
+    ? pathname.replace(PAGE_PATH_PATTERN, `/p/${pageNumber}/`)
+    : `${pathname.replace(/\/?$/, "/")}p/${pageNumber}/`;
+
+// Built from the address bar, not from Marktplaats' "Volgende" link: that
+// link does not always carry the search filters, and they must come along.
+const urlForPage = (pageNumber) =>
+  `${location.origin}${pathForPage(location.pathname, pageNumber)}` +
+  `${location.search}${location.hash}`;
 
 const createPageDivider = (pageNumber) => {
   const divider = document.createElement("li");
   divider.className = PAGE_DIVIDER_CLASS;
+  divider.setAttribute(LOADED_ATTRIBUTE, "true");
   divider.textContent = `Pagina ${pageNumber}`;
   divider.style.cssText =
     "list-style:none;padding:12px 0 4px;font-weight:bold;color:#767676;";
   return divider;
 };
 
-const fetchPage = async (url) => {
-  const response = await fetch(url, { credentials: "same-origin" });
-  if (!response.ok) {
-    throw new Error(`Pagina ophalen mislukt (${response.status}): ${url}`);
-  }
-  return new DOMParser().parseFromString(await response.text(), "text/html");
-};
-
-const appendListingsFrom = (pageDocument, pageNumber) => {
+const appendListingsFrom = (pageDocument, links, pageNumber) => {
   const target = findMainList(document);
   const source = findMainList(pageDocument);
   if (!target || !source) {
     return 0;
   }
   const listings = [...source.querySelectorAll(LISTING_SELECTOR)];
+  if (listings.length === 0) {
+    return 0;
+  }
   target.appendChild(createPageDivider(pageNumber));
-  listings.forEach((listing) => target.appendChild(document.adoptNode(listing)));
+  listings.forEach((listing) => {
+    const adopted = document.adoptNode(listing);
+    adopted.setAttribute(LOADED_ATTRIBUTE, "true");
+    restoreMissingLinks(adopted, links);
+    target.appendChild(adopted);
+  });
   return listings.length;
 };
 
-// Point "Volgende" past the pages we already pulled in.
-const updateNextPageLinks = (pageDocument) => {
-  const nextLink = pageDocument.querySelector(NEXT_PAGE_LINK_SELECTOR);
-  const nextHref = nextLink ? nextLink.getAttribute("href") : null;
+const isLastPage = (pageDocument) => {
+  const pagination = pageDocument.querySelector(PAGINATION_SELECTOR);
+  const match = pagination ? pagination.textContent.match(PAGE_COUNT_PATTERN) : null;
+  return match !== null && Number(match[1]) >= Number(match[2]);
+};
+
+const hasNextPage = (pageDocument) =>
+  pageDocument.querySelector(NEXT_PAGE_LINK_SELECTOR) !== null &&
+  !isLastPage(pageDocument);
+
+// Point "Volgende" past the pages we already pulled in, or hide it at the end.
+const updateNextPageLinks = (nextUrl) => {
   document.querySelectorAll(NEXT_PAGE_LINK_SELECTOR).forEach((link) => {
-    if (nextHref) {
-      link.setAttribute("href", nextHref);
+    if (nextUrl !== null) {
+      link.setAttribute("href", nextUrl);
     } else {
       // Not via hide(): this must stay hidden when settings change.
       link.setAttribute(EXHAUSTED_ATTRIBUTE, "true");
@@ -175,45 +205,98 @@ const findNextPageLink = () => {
   return link && !link.hasAttribute(EXHAUSTED_ATTRIBUTE) ? link : null;
 };
 
-const currentPageKey = () => `${location.pathname}${location.search}`;
+// The part after "#" holds the search filters, so it is part of the key.
+const currentPageKey = () =>
+  `${location.pathname}${location.search}${location.hash}`;
+
+// Pages added for an earlier search do not belong to the current one.
+const removeLoadedPages = () => {
+  document
+    .querySelectorAll(`[${LOADED_ATTRIBUTE}]`)
+    .forEach((element) => element.remove());
+  document.querySelectorAll(`[${EXHAUSTED_ATTRIBUTE}]`).forEach((link) => {
+    link.removeAttribute(EXHAUSTED_ATTRIBUTE);
+    link.style.display = "";
+  });
+};
 
 // Replaced as a whole on every change, never mutated in place.
-let pageState = { key: null, loading: false, pagesLoaded: 0 };
+let pageState = { key: null, loading: false, pagesLoaded: 0, since: 0 };
 
 const resetPageStateIfNavigated = () => {
-  if (pageState.key !== currentPageKey()) {
-    pageState = { key: currentPageKey(), loading: false, pagesLoaded: 0 };
+  if (pageState.key === currentPageKey()) {
+    return;
+  }
+  if (pageState.key !== null) {
+    removeLoadedPages();
+  }
+  pageState = {
+    key: currentPageKey(),
+    loading: false,
+    pagesLoaded: 0,
+    since: Date.now(),
+  };
+  if (location.hash !== "") {
+    // Nothing else may wake us up once Marktplaats is done redrawing.
+    setTimeout(() => processListings(activeFilters), FILTER_SETTLE_MS + 50);
   }
 };
+
+const mainPageHasSettled = () =>
+  location.hash === "" || Date.now() - pageState.since >= FILTER_SETTLE_MS;
 
 const shouldLoadNextPage = (settings) =>
   settings.loadMorePages &&
   !pageState.loading &&
   pageState.pagesLoaded < MAX_EXTRA_PAGES &&
+  mainPageHasSettled() &&
   countVisibleListings() < MIN_VISIBLE_LISTINGS &&
   findNextPageLink() !== null;
+
+const loadPageInto = async (pageNumber, key) => {
+  try {
+    return await withPageDocument(
+      urlForPage(pageNumber),
+      LISTING_SELECTOR,
+      (pageDocument, links) =>
+        currentPageKey() === key
+          ? {
+              added: appendListingsFrom(pageDocument, links, pageNumber),
+              hasNext: hasNextPage(pageDocument),
+            }
+          : null
+    );
+  } catch (error) {
+    console.error("[Marktplaats voor mensen] Doorladen gestopt:", error);
+    return { added: 0, hasNext: false, failed: true };
+  }
+};
 
 const loadNextPageIfSparse = async (settings) => {
   resetPageStateIfNavigated();
   if (!shouldLoadNextPage(settings)) {
     return;
   }
-  const url = findNextPageLink().href;
+  const key = pageState.key;
+  const pageNumber =
+    pageNumberFromPath(location.pathname) + pageState.pagesLoaded + 1;
   pageState = { ...pageState, loading: true };
-  try {
-    const pageDocument = await fetchPage(url);
-    appendListingsFrom(pageDocument, pageNumberFromUrl(url));
-    updateNextPageLinks(pageDocument);
+
+  const outcome = await loadPageInto(pageNumber, key);
+
+  // The user moved on to another search meanwhile: this result is not theirs.
+  if (outcome !== null && pageState.key === key && currentPageKey() === key) {
+    const hasMore = outcome.added > 0 && outcome.hasNext;
+    if (!outcome.failed) {
+      updateNextPageLinks(hasMore ? urlForPage(pageNumber + 1) : null);
+    }
     pageState = {
       ...pageState,
       loading: false,
-      pagesLoaded: pageState.pagesLoaded + 1,
+      pagesLoaded: hasMore ? pageState.pagesLoaded + 1 : MAX_EXTRA_PAGES,
     };
-  } catch (error) {
-    console.error("[Marktplaats voor mensen] Doorladen gestopt:", error);
-    pageState = { ...pageState, loading: false, pagesLoaded: MAX_EXTRA_PAGES };
   }
-  // Settings may have changed while the page was being fetched.
+  // Settings may have changed while the page was being loaded.
   processListings(activeFilters);
 };
 

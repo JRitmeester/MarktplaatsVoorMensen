@@ -3,7 +3,7 @@
   "private": true,
   "description": "Chrome extension that filters unwanted listings on Marktplaats",
   "scripts": {
-    "test": "node --test \"tests/*.test.js\""
+    "test": "node --test --test-force-exit \"tests/*.test.js\""
   },
   "devDependencies": {
     "jsdom": "^25.0.1"

@@ -22,6 +22,8 @@
                 "settings.js",
                 "text-filter.js",
                 "notice.js",
+                "listing-links.js",
+                "page-loader.js",
                 "content.js"
             ]
         }
