@@ -27,7 +27,15 @@ const LOCATION_SELECTOR =
   '[class*="hz-Listing-location"], [data-testid="location-label"]';
 const NATIONWIDE_LOCATION = "heel nederland";
 
-const BANNER_SELECTOR = '[class*="hz-Banner"]';
+// A price of "Zie omschrijving" instead of an amount is common for businesses.
+// The selector also matches wrappers around the price, hence the exact text.
+const PRICE_SELECTOR = '[class*="ListingPrice_"], [class*="hz-Listing-price"]';
+const SEE_DESCRIPTION_PRICE = "zie omschrijving";
+
+// Banner slots, including the empty placeholder that Marktplaats keeps 250px
+// high while a banner loads. Once the listings around them are hidden they
+// only leave a white gap.
+const BANNER_SELECTOR = '[class*="hz-Banner"], li[class*="bannerContainer"]';
 
 // Marktplaats paginates before we filter, so a page can end up nearly empty.
 // When that happens we fetch the next page(s) and append their listings.
@@ -37,6 +45,16 @@ const MIN_VISIBLE_LISTINGS = 10;
 const MAX_EXTRA_PAGES = 5;
 const PAGE_DIVIDER_CLASS = "mvm-page-divider";
 const EXHAUSTED_ATTRIBUTE = "data-mvm-exhausted";
+// Marks what this extension hid, so it can be shown again when settings change.
+const HIDDEN_ATTRIBUTE = "data-mvm-hidden";
+
+const FILTER_KEYS = [
+  "hideCompanyAds",
+  "hideOpvalAds",
+  "hideDagtopperAds",
+  "hideHeelNederlandAds",
+  "hideSeeDescriptionAds",
+];
 
 const isCompanyListing = (listing) =>
   listing.matches(ADMARKT_LISTING_SELECTOR) ||
@@ -55,14 +73,39 @@ const hasNationwideLocation = (listing) =>
     (element) => element.textContent.trim().toLowerCase() === NATIONWIDE_LOCATION
   );
 
-const shouldHide = (listing, settings) =>
+// "filters" is the validated settings plus the text filter built from them.
+const createFilters = (settings) =>
+  Object.freeze({ settings, textFilter: createTextFilter(settings) });
+
+const isAnyFilterActive = ({ settings, textFilter }) =>
+  FILTER_KEYS.some((key) => settings[key]) || textFilter !== null;
+
+const hasSeeDescriptionPrice = (listing) =>
+  [...listing.querySelectorAll(PRICE_SELECTOR)].some(
+    (element) => element.textContent.trim().toLowerCase() === SEE_DESCRIPTION_PRICE
+  );
+
+const shouldHide = (listing, { settings, textFilter }) =>
   (settings.hideCompanyAds && isCompanyListing(listing)) ||
   (settings.hideOpvalAds && hasOpvalSticker(listing)) ||
   (settings.hideDagtopperAds && hasPriorityLabel(listing)) ||
-  (settings.hideHeelNederlandAds && hasNationwideLocation(listing));
+  (settings.hideHeelNederlandAds && hasNationwideLocation(listing)) ||
+  (settings.hideSeeDescriptionAds && hasSeeDescriptionPrice(listing)) ||
+  (textFilter !== null && textFilter.lacksRequiredText(listing));
 
 const hide = (element) => {
+  if (element.style.display === "none") {
+    return;
+  }
   element.style.display = "none";
+  element.setAttribute(HIDDEN_ATTRIBUTE, "true");
+};
+
+const unhideAll = () => {
+  document.querySelectorAll(`[${HIDDEN_ATTRIBUTE}]`).forEach((element) => {
+    element.style.display = "";
+    element.removeAttribute(HIDDEN_ATTRIBUTE);
+  });
 };
 
 const isVisible = (element) => element.style.display !== "none";
@@ -120,8 +163,9 @@ const updateNextPageLinks = (pageDocument) => {
     if (nextHref) {
       link.setAttribute("href", nextHref);
     } else {
+      // Not via hide(): this must stay hidden when settings change.
       link.setAttribute(EXHAUSTED_ATTRIBUTE, "true");
-      hide(link);
+      link.style.display = "none";
     }
   });
 };
@@ -169,39 +213,63 @@ const loadNextPageIfSparse = async (settings) => {
     console.error("[Marktplaats voor mensen] Doorladen gestopt:", error);
     pageState = { ...pageState, loading: false, pagesLoaded: MAX_EXTRA_PAGES };
   }
-  processListings(settings);
+  // Settings may have changed while the page was being fetched.
+  processListings(activeFilters);
 };
 
-const processListings = (settings) => {
-  const listings = [...document.querySelectorAll(LISTING_SELECTOR)];
-  listings.filter((listing) => shouldHide(listing, settings)).forEach(hide);
+const clearTextFilter = () => {
+  chrome.storage.sync.set({ requiredText: "" });
+};
 
-  if (settings.hideCompanyAds) {
+const processListings = (filters) => {
+  if (filters === null) {
+    return;
+  }
+  syncTextFilterNotice(filters.textFilter, findMainList(document), clearTextFilter);
+  if (!isAnyFilterActive(filters)) {
+    return;
+  }
+
+  const listings = [...document.querySelectorAll(LISTING_SELECTOR)];
+  listings.filter((listing) => shouldHide(listing, filters)).forEach(hide);
+
+  if (filters.settings.hideCompanyAds) {
     document.querySelectorAll(ADMARKT_CONTAINER_SELECTOR).forEach(hide);
   }
 
   // Banners only take up empty space once their listings are hidden.
   document.querySelectorAll(BANNER_SELECTOR).forEach(hide);
 
-  loadNextPageIfSparse(settings);
+  loadNextPageIfSparse(filters.settings);
 };
 
-const FILTER_KEYS = [
-  "hideCompanyAds",
-  "hideOpvalAds",
-  "hideDagtopperAds",
-  "hideHeelNederlandAds",
-];
-const SETTING_KEYS = [...FILTER_KEYS, "loadMorePages"];
+// Replaced as a whole whenever the stored settings change, never mutated.
+let activeFilters = null;
 
-chrome.storage.sync.get(SETTING_KEYS, (settings) => {
-  const anyEnabled = FILTER_KEYS.some((key) => settings[key]);
-  if (!anyEnabled) {
-    return;
+const applySettings = (stored) => {
+  if (chrome.runtime.lastError) {
+    console.error(
+      "[Marktplaats voor mensen] Instellingen lezen mislukt, standaardwaarden gebruikt:",
+      chrome.runtime.lastError
+    );
   }
+  activeFilters = createFilters(normalizeSettings(stored));
+  unhideAll();
+  processListings(activeFilters);
+};
 
-  processListings(settings);
+const loadSettings = () => {
+  chrome.storage.sync.get(DEFAULT_SETTINGS, applySettings);
+};
 
-  const observer = new MutationObserver(() => processListings(settings));
-  observer.observe(document.body, { childList: true, subtree: true });
+loadSettings();
+
+const observer = new MutationObserver(() => processListings(activeFilters));
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Changes made in the popup or options page apply without a reload.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "sync") {
+    loadSettings();
+  }
 });

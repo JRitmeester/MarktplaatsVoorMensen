@@ -19,6 +19,9 @@
                 "*://www.marktplaats.nl/*"
             ],
             "js": [
+                "settings.js",
+                "text-filter.js",
+                "notice.js",
                 "content.js"
             ]
         }

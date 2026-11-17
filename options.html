@@ -29,10 +29,30 @@
         </li>
         <li>
             <label>
+                <input type="checkbox" id="hideSeeDescriptionAds"> Verberg advertenties met prijs "Zie omschrijving"
+            </label>
+        </li>
+        <li>
+            <label>
                 <input type="checkbox" id="loadMorePages"> Laad automatisch volgende pagina's als er weinig overblijft
             </label>
         </li>
     </ul>
-    <script src="options.js"></script>
+    <h2>Tekstfilter</h2>
+    <label for="requiredText">Toon alleen advertenties met deze tekst</label>
+    <input type="text" id="requiredText" maxlength="100" autocomplete="off" placeholder="Bijvoorbeeld: Switch 2">
+    <label for="requiredTextScope">Zoek in</label>
+    <select id="requiredTextScope">
+        <option value="title">Titel</option>
+        <option value="description">Beschrijving</option>
+        <option value="either">Titel of beschrijving</option>
+    </select>
+    <label>
+        <input type="checkbox" id="requiredTextWholeWords"> Alleen hele woorden ("Switch 2" past dan niet op "Switch 2019")
+    </label>
+    <p class="hint">Laat het tekstveld leeg om dit filter uit te zetten. Hoofdletters maken niet uit.</p>
+    <p id="status" role="status"></p>
+    <script src="settings.js"></script>
+    <script src="settings-form.js"></script>
 </body>
 </html>
