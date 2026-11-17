@@ -38,6 +38,7 @@ The extension is built using vanilla JavaScript and consists of:
 - `notice.js`: The "text filter active" notice above the results
 - `page-loader.js`: Loads a later results page, through a hidden frame when search filters are active
 - `listing-links.js`: Puts the address back on loaded listings that Marktplaats draws without one
+- `page-count.js`: Shows the range of loaded pages in the page count below the results
 - `popup.html`, `options.html`: User interface for settings
 - `settings-form.js`: Loads and saves the settings for both pages
 - `background.js`: Fills in defaults for settings that are not stored yet

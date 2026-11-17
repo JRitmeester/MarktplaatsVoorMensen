@@ -309,6 +309,7 @@ const processListings = (filters) => {
     return;
   }
   syncTextFilterNotice(filters.textFilter, findMainList(document), clearTextFilter);
+  syncPageCount();
   if (!isAnyFilterActive(filters)) {
     return;
   }

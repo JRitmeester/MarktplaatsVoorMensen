@@ -170,6 +170,12 @@ const isHidden = (element) => element.style.display === "none";
 
 const listings = (document) => [...document.querySelectorAll(LISTING_SELECTOR)];
 
+// The page count labels a visitor can see below the results.
+const pageCountLabels = (document) =>
+  [...document.querySelectorAll('[class*="amountOfPages"]')]
+    .filter((label) => !isHidden(label))
+    .map((label) => label.textContent);
+
 const visibleTitles = (document) =>
   listings(document)
     .filter((listing) => !isHidden(listing))
@@ -196,14 +202,18 @@ const listing = ({ title, description = "", attributes = "", price = "€&nbsp;1
 
 // Like Marktplaats: "Volgende" is a link while there is a next page and a
 // plain button on the last page.
-const pageBody = (listingsHtml, { nextHref = null, extra = "" } = {}) =>
+const pageBody = (listingsHtml, { nextHref = null, extra = "", pageCount = null } = {}) =>
   `<ul class="hz-Listings hz-Listings--list-view listings-container">${listingsHtml}</ul>` +
   extra +
   `<div class="hz-PaginationControls"><nav>` +
   (nextHref
     ? `<a aria-label="Volgende" href="${nextHref}">&gt;</a>`
     : `<button aria-label="Volgende">&gt;</button>`) +
-  `</nav></div>`;
+  `</nav>` +
+  (pageCount === null
+    ? ""
+    : `<span class="hz-Text hz-PaginationControls-pagination-amountOfPages">${pageCount}</span>`) +
+  `</div>`;
 
 const page = (listingsHtml, options) =>
   `<!doctype html><html><body>${pageBody(listingsHtml, options)}</body></html>`;
@@ -217,6 +227,7 @@ module.exports = {
   loadPage,
   page,
   pageBody,
+  pageCountLabels,
   readProjectFile,
   visibleTitles,
 };

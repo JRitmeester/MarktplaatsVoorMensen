@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { listing, loadPage, page, pageBody, visibleTitles } = require("./helpers");
+const { listing, loadPage, page, pageBody, pageCountLabels, visibleTitles } = require("./helpers");
 
 const FILTERS = "#q:switch+2|PriceCentsFrom:25000|PriceCentsTo:36000";
 const STORED = { hideCompanyAds: true, loadMorePages: true };
@@ -13,7 +13,7 @@ const FILTERED_FRAMES = {
   [`/q/test/p/2/${FILTERS}`]: pageBody(listing({ title: "Gefilterd pagina 2", price: "€&nbsp;300,00" }), { nextHref: "/q/test/p/3/" }),
   [`/q/test/p/3/${FILTERS}`]: pageBody(listing({ title: "Gefilterd pagina 3", price: "€&nbsp;310,00" })),
 };
-const firstPage = page(listing({ title: "Pagina 1" }), { nextHref: "/q/test/p/2/" });
+const firstPage = page(listing({ title: "Pagina 1" }), { nextHref: "/q/test/p/2/", pageCount: "Pagina 1 van 10" });
 
 test("with search filters, later pages come from a frame that carries the filters", async () => {
   const { document, fetched } = await loadPage({
@@ -48,6 +48,7 @@ test("pages loaded for one search are removed when the filters change", async ()
   await new Promise((resolve) => setTimeout(resolve, 100));
   assert.deepEqual(visibleTitles(document), ["Pagina 1"]);
   assert.equal(document.querySelector(".mvm-page-divider"), null);
+  assert.deepEqual(pageCountLabels(document), ["Pagina 1 van 10"]);
 });
 
 test("without search filters the next pages are still fetched directly", async () => {
@@ -59,6 +60,13 @@ test("without search filters the next pages are still fetched directly", async (
   });
   assert.deepEqual(fetched, ["/q/test/p/2/", "/q/test/p/3/"]);
   assert.deepEqual(visibleTitles(document), ["Pagina 1", "Ongefilterd pagina 2", "Ongefilterd pagina 3"]);
+});
+
+test("the page count shows the range of pages that are on screen", async () => {
+  const { document } = await loadPage({ html: firstPage, pages: SERVER_PAGES, stored: STORED, settleMs: 300 });
+  assert.deepEqual(pageCountLabels(document), ["Pagina 1 t/m 3 van 10"]);
+  const untouched = await loadPage({ html: firstPage, pages: SERVER_PAGES, stored: { hideCompanyAds: true } });
+  assert.deepEqual(pageCountLabels(untouched.document), ["Pagina 1 van 10"]);
 });
 
 const PHOTO = "02632ecc-fe6c-4f29-b00b-51a65d9b5c9b";

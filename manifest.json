@@ -24,6 +24,7 @@
                 "notice.js",
                 "listing-links.js",
                 "page-loader.js",
+                "page-count.js",
                 "content.js"
             ]
         }
